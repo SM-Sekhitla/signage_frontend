@@ -1,7 +1,7 @@
-{/*import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Search, Briefcase } from "lucide-react";
-//import { Link } from "react-router-dom";
-//import { useAuth } from "@/contexts/AuthContext";
+import { Link } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
 
 const Hero = () => {
   const { user, userRole } = useAuth();
@@ -44,14 +44,15 @@ const Hero = () => {
           {/* CTA Buttons */}
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-16">
             <Link to="/installers" className="w-full sm:w-auto">
-              <Button variant="hero" size="xl" className="w-full">
+              <Button variant="default" size="lg" className="w-full">
                 <Search className="mr-2" />
                 Find Installer
               </Button>
             </Link>
             <Link to={user && userRole === 'installer' ? '/installer/dashboard' : '/auth/signup'} className="w-full sm:w-auto">
-              <Button variant="hero-outline" size="xl" className="w-full">
+              <Button variant="outline" size="lg" className="w-full">
                 <Briefcase className="mr-2" />
+                
                 {user && userRole === 'installer' ? 'My Dashboard' : 'Become an Installer'}
               </Button>
             </Link>
@@ -60,7 +61,7 @@ const Hero = () => {
           {/* Stats */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-8 max-w-3xl mx-auto">
             <div className="bg-white/10 backdrop-blur-sm rounded-lg p-6 border border-white/20">
-              <div className="text-3xl font-bold text-cyan-bright mb-2">500+</div>
+              <div className="text-3xl font-bold text-cyan-bright mb-2">10+</div>
               <div className="text-white/80 text-sm">Verified Installers</div>
             </div>
             <div className="bg-white/10 backdrop-blur-sm rounded-lg p-6 border border-white/20">

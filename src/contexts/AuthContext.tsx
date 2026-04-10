@@ -1,91 +1,63 @@
 import { createContext, useContext, useEffect, useState } from 'react';
-import { User, Session } from '@supabase/supabase-js';
-import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
+import { getCurrentUser, getUserRole, signOutLocal } from '@/lib/localStorage';
 
 type UserRole = 'admin' | 'installer' | 'client';
 
+interface LocalUser {
+  id: string;
+  email: string;
+}
+
 interface AuthContextType {
-  user: User | null;
-  session: Session | null;
+  user: LocalUser | null;
+  session: any;
   userRole: UserRole | null;
   loading: boolean;
   signOut: () => Promise<void>;
+  refreshAuth: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
+  const [user, setUser] = useState<LocalUser | null>(null);
   const [userRole, setUserRole] = useState<UserRole | null>(null);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
+  const loadAuth = () => {
+    const currentUser = getCurrentUser();
+    setUser(currentUser);
+
+    if (currentUser) {
+      const role = getUserRole(currentUser.id) as UserRole | null;
+      setUserRole(role);
+    } else {
+      setUserRole(null);
+    }
+    setLoading(false);
+  };
+
   useEffect(() => {
-    // Set up auth state listener
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
-
-        if (session?.user) {
-          // Fetch user role with setTimeout to avoid deadlock
-          setTimeout(() => {
-            fetchUserRole(session.user.id);
-          }, 0);
-        } else {
-          setUserRole(null);
-        }
-      }
-    );
-
-    // Check for existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      
-      if (session?.user) {
-        fetchUserRole(session.user.id);
-      } else {
-        setLoading(false);
-      }
-    });
-
-    return () => subscription.unsubscribe();
+    loadAuth();
   }, []);
 
-  const fetchUserRole = async (userId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', userId)
-        .single();
-
-      if (error) throw error;
-      setUserRole(data?.role as UserRole);
-    } catch (error) {
-      console.error('Error fetching user role:', error);
-    } finally {
-      setLoading(false);
-    }
+  const refreshAuth = () => {
+    loadAuth();
   };
 
   const signOut = async () => {
-    try {
-      const { error } = await supabase.auth.signOut();
-      if (error) throw error;
-      toast.success('Signed out successfully');
-      navigate('/');
-    } catch (error: any) {
-      toast.error(error.message);
-    }
+    signOutLocal();
+    setUser(null);
+    setUserRole(null);
+    toast.success('Signed out successfully');
+    navigate('/');
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, userRole, loading, signOut }}>
+    <AuthContext.Provider value={{ user, session: user, userRole, loading, signOut, refreshAuth }}>
       {children}
     </AuthContext.Provider>
   );
