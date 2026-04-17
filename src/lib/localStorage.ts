@@ -10,7 +10,154 @@ const KEYS = {
   INSTALLER_AVAILABILITY: 'app_installer_availability',
   SPECIALTIES: 'app_specialties',
   CURRENT_USER: 'app_current_user',
+  PENDING_SIGNUPS: 'app_pending_signups',
+  PASSWORD_RESETS: 'app_password_resets',
 };
+
+const RESET_EXPIRY_MS = 30 * 60 * 1000; // 30 minutes
+
+export interface PasswordResetToken {
+  token: string;
+  email: string;
+  expires_at: number;
+  used: boolean;
+  created_at: string;
+}
+
+export function requestPasswordReset(email: string): { token: string; resetUrl: string; error: string | null } {
+  if (!emailExists(email)) {
+    return { token: '', resetUrl: '', error: 'No account found with this email address.' };
+  }
+  const token = crypto.randomUUID().replace(/-/g, '');
+  const entry: PasswordResetToken = {
+    token,
+    email,
+    expires_at: Date.now() + RESET_EXPIRY_MS,
+    used: false,
+    created_at: new Date().toISOString(),
+  };
+  const all = getStore<PasswordResetToken>(KEYS.PASSWORD_RESETS).filter(
+    (r) => r.email.toLowerCase() !== email.toLowerCase() || r.used
+  );
+  all.push(entry);
+  setStore(KEYS.PASSWORD_RESETS, all);
+  const resetUrl = `${window.location.origin}/auth/reset-password?token=${token}`;
+  return { token, resetUrl, error: null };
+}
+
+export function getPasswordReset(token: string): PasswordResetToken | null {
+  const all = getStore<PasswordResetToken>(KEYS.PASSWORD_RESETS);
+  return all.find((r) => r.token === token) || null;
+}
+
+export function resetPasswordWithToken(token: string, newPassword: string): { error: string | null } {
+  const entry = getPasswordReset(token);
+  if (!entry) return { error: 'Invalid reset link.' };
+  if (entry.used) return { error: 'This reset link has already been used.' };
+  if (Date.now() > entry.expires_at) return { error: 'This reset link has expired. Please request a new one.' };
+
+  const pwdError = validatePassword(newPassword);
+  if (pwdError) return { error: pwdError };
+
+  const users = getStore<LocalUser>(KEYS.USERS);
+  const idx = users.findIndex((u) => u.email.toLowerCase() === entry.email.toLowerCase());
+  if (idx === -1) return { error: 'Account not found.' };
+  users[idx].password = newPassword;
+  setStore(KEYS.USERS, users);
+
+  const all = getStore<PasswordResetToken>(KEYS.PASSWORD_RESETS);
+  const tIdx = all.findIndex((r) => r.token === token);
+  if (tIdx !== -1) {
+    all[tIdx].used = true;
+    setStore(KEYS.PASSWORD_RESETS, all);
+  }
+  return { error: null };
+}
+
+const OTP_EXPIRY_MS = 2 * 60 * 1000; // 2 minutes
+
+export interface PendingSignup {
+  email: string;
+  password: string;
+  metadata: Record<string, any>;
+  otp: string;
+  otp_expires_at: number;
+  created_at: string;
+}
+
+function generateOtp(): string {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+export function emailExists(email: string): boolean {
+  const users = getStore<LocalUser>(KEYS.USERS);
+  return users.some(u => u.email.toLowerCase() === email.toLowerCase());
+}
+
+export function validatePassword(password: string): string | null {
+  if (password.length < 8) return 'Password must be at least 8 characters long';
+  if (!/[A-Z]/.test(password)) return 'Password must contain at least one uppercase letter';
+  if (!/[a-z]/.test(password)) return 'Password must contain at least one lowercase letter';
+  if (!/[0-9]/.test(password)) return 'Password must contain at least one number';
+  if (!/[!@#$%^&*(),.?":{}|<>_\-+=/\\[\]~`';]/.test(password)) return 'Password must contain at least one special character';
+  return null;
+}
+
+export function requestSignupOtp(email: string, password: string, metadata: Record<string, any> = {}): { otp: string; error: string | null } {
+  if (emailExists(email)) {
+    return { otp: '', error: 'An account with this email already exists. Please use a different email.' };
+  }
+  const pwdError = validatePassword(password);
+  if (pwdError) return { otp: '', error: pwdError };
+
+  const otp = generateOtp();
+  const pending: PendingSignup = {
+    email,
+    password,
+    metadata,
+    otp,
+    otp_expires_at: Date.now() + OTP_EXPIRY_MS,
+    created_at: new Date().toISOString(),
+  };
+  const all = getStore<PendingSignup>(KEYS.PENDING_SIGNUPS).filter(p => p.email.toLowerCase() !== email.toLowerCase());
+  all.push(pending);
+  setStore(KEYS.PENDING_SIGNUPS, all);
+  return { otp, error: null };
+}
+
+export function getPendingSignup(email: string): PendingSignup | null {
+  const all = getStore<PendingSignup>(KEYS.PENDING_SIGNUPS);
+  return all.find(p => p.email.toLowerCase() === email.toLowerCase()) || null;
+}
+
+export function resendSignupOtp(email: string): { otp: string; error: string | null } {
+  const pending = getPendingSignup(email);
+  if (!pending) return { otp: '', error: 'No pending signup found for this email' };
+  return requestSignupOtp(pending.email, pending.password, pending.metadata);
+}
+
+export function verifyOtpAndCreateAccount(email: string, otp: string): { user: LocalUser | null; error: string | null; expired?: boolean } {
+  const pending = getPendingSignup(email);
+  if (!pending) return { user: null, error: 'No pending signup found. Please sign up again.' };
+
+  if (Date.now() > pending.otp_expires_at) {
+    return { user: null, error: 'OTP has expired. Please request a new one.', expired: true };
+  }
+  if (pending.otp !== otp.trim()) {
+    return { user: null, error: 'Incorrect OTP. Please enter the correct OTP.' };
+  }
+
+  const { user, error } = signUp(pending.email, pending.password, pending.metadata);
+  if (error) return { user: null, error };
+
+  // Remove pending entry
+  const all = getStore<PendingSignup>(KEYS.PENDING_SIGNUPS).filter(p => p.email.toLowerCase() !== email.toLowerCase());
+  setStore(KEYS.PENDING_SIGNUPS, all);
+
+  // Sign out so user must log in with email + password (per requirement)
+  signOutLocal();
+  return { user, error: null };
+}
 
 function getStore<T>(key: string): T[] {
   try {
