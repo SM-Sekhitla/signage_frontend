@@ -25,6 +25,7 @@ import ClientBookings from "./pages/client/ClientBookings";
 import ClientHistory from "./pages/client/ClientHistory";
 import Unauthorized from "./pages/Unauthorized";
 import NotFound from "./pages/NotFound";
+import { AppDataProvider } from "./contexts/AppDataProvider";
 
 const queryClient = new QueryClient();
 
@@ -35,6 +36,7 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
+        <AppDataProvider>
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/auth/login" element={<Login />} />
@@ -141,6 +143,7 @@ const App = () => (
             
             
           </Routes>
+        </AppDataProvider>
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
