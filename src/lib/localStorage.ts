@@ -159,6 +159,53 @@ export function verifyOtpAndCreateAccount(email: string, otp: string): { user: L
   return { user, error: null };
 }
 
+// ---- Seed default admin ----
+export const DEFAULT_ADMIN_EMAIL = 'admin@sibms.com';
+export const DEFAULT_ADMIN_PASSWORD = 'Admin@123';
+
+export function seedDefaultAdmin(): void {
+  const users = getStore<LocalUser>(KEYS.USERS);
+  const existing = users.find(u => u.email.toLowerCase() === DEFAULT_ADMIN_EMAIL);
+  if (existing) {
+    const roles = getStore<any>(KEYS.USER_ROLES);
+    if (!roles.find((r: any) => r.user_id === existing.id)) {
+      roles.push({ id: generateId(), user_id: existing.id, role: 'admin', created_at: new Date().toISOString() });
+      setStore(KEYS.USER_ROLES, roles);
+    }
+    return;
+  }
+  const id = generateId();
+  const user: LocalUser = {
+    id,
+    email: DEFAULT_ADMIN_EMAIL,
+    password: DEFAULT_ADMIN_PASSWORD,
+    created_at: new Date().toISOString(),
+    user_metadata: { full_name: 'Super Admin', role: 'admin' },
+  };
+  users.push(user);
+  setStore(KEYS.USERS, users);
+
+  const profiles = getStore<any>(KEYS.PROFILES);
+  profiles.push({
+    id,
+    full_name: 'Super Admin',
+    contact_number: '',
+    province: '',
+    company_name: '',
+    bio: null,
+    profile_photo: null,
+    company_logo: null,
+    company_portfolio_url: null,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  });
+  setStore(KEYS.PROFILES, profiles);
+
+  const roles = getStore<any>(KEYS.USER_ROLES);
+  roles.push({ id: generateId(), user_id: id, role: 'admin', created_at: new Date().toISOString() });
+  setStore(KEYS.USER_ROLES, roles);
+}
+
 function getStore<T>(key: string): T[] {
   try {
     const data = localStorage.getItem(key);
@@ -188,13 +235,14 @@ export interface LocalUser {
 
 export function signUp(email: string, password: string, metadata: Record<string, any> = {}): { user: LocalUser; error: string | null } {
   const users = getStore<LocalUser>(KEYS.USERS);
-  if (users.find(u => u.email === email)) {
+  const normalizedEmail = email.trim().toLowerCase();
+  if (users.find(u => u.email.toLowerCase() === normalizedEmail)) {
     return { user: null as any, error: 'User already exists with this email' };
   }
 
   const user: LocalUser = {
     id: generateId(),
-    email,
+    email: normalizedEmail,
     password,
     created_at: new Date().toISOString(),
     user_metadata: metadata,
@@ -241,9 +289,13 @@ export function signUp(email: string, password: string, metadata: Record<string,
 
 export function signIn(email: string, password: string): { user: LocalUser | null; error: string | null } {
   const users = getStore<LocalUser>(KEYS.USERS);
-  const user = users.find(u => u.email === email && u.password === password);
+  const normalized = email.trim().toLowerCase();
+  const user = users.find(u => u.email.toLowerCase() === normalized);
   if (!user) {
-    return { user: null, error: 'Invalid login credentials' };
+    return { user: null, error: 'No account found with this email address.' };
+  }
+  if (user.password !== password) {
+    return { user: null, error: 'Incorrect password. Please try again.' };
   }
   localStorage.setItem(KEYS.CURRENT_USER, JSON.stringify({ id: user.id, email: user.email }));
   return { user, error: null };
@@ -511,4 +563,273 @@ export function getInstallersWithSpecialties(): any[] {
       portfolio_count: portfolioCount,
     };
   });
+}
+
+// ---- Admin: User Management ----
+
+export type AppRole = 'admin' | 'installer' | 'client';
+
+export interface AdminUserView {
+  id: string;
+  email: string;
+  role: AppRole | null;
+  full_name: string;
+  contact_number: string | null;
+  province: string | null;
+  company_name: string | null;
+  created_at: string;
+  bookings_count: number;
+}
+
+export function getAllUsersDetailed(): AdminUserView[] {
+  const users = getStore<LocalUser>(KEYS.USERS);
+  const profiles = getAllProfiles();
+  const roles = getAllRoles();
+  const bookings = getStore<any>(KEYS.BOOKINGS);
+
+  return users.map(u => {
+    const profile = profiles.find((p: any) => p.id === u.id);
+    const role = roles.find((r: any) => r.user_id === u.id);
+    const bookingsCount = bookings.filter((b: any) => b.client_id === u.id || b.installer_id === u.id).length;
+    return {
+      id: u.id,
+      email: u.email,
+      role: (role?.role as AppRole) || null,
+      full_name: profile?.full_name || '',
+      contact_number: profile?.contact_number || null,
+      province: profile?.province || null,
+      company_name: profile?.company_name || null,
+      created_at: u.created_at,
+      bookings_count: bookingsCount,
+    };
+  }).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+}
+
+export function adminCreateUser(input: {
+  email: string;
+  password: string;
+  role: AppRole;
+  full_name: string;
+  contact_number?: string;
+  province?: string;
+  company_name?: string;
+}): { error: string | null } {
+  if (emailExists(input.email)) return { error: 'An account with this email already exists.' };
+  const pwdError = validatePassword(input.password);
+  if (pwdError) return { error: pwdError };
+
+  // Preserve current admin session
+  const currentSession = localStorage.getItem(KEYS.CURRENT_USER);
+  const { error } = signUp(input.email, input.password, {
+    full_name: input.full_name,
+    contact_number: input.contact_number || '',
+    province: input.province || '',
+    company_name: input.company_name || '',
+    role: input.role,
+  });
+  // Restore admin session (signUp auto-logs in the new user)
+  if (currentSession) localStorage.setItem(KEYS.CURRENT_USER, currentSession);
+  else localStorage.removeItem(KEYS.CURRENT_USER);
+  return { error };
+}
+
+export function adminUpdateUser(userId: string, updates: {
+  email?: string;
+  full_name?: string;
+  contact_number?: string;
+  province?: string;
+  company_name?: string;
+  role?: AppRole;
+  password?: string;
+}): { error: string | null } {
+  const users = getStore<LocalUser>(KEYS.USERS);
+  const uIdx = users.findIndex(u => u.id === userId);
+  if (uIdx === -1) return { error: 'User not found' };
+
+  if (updates.email && updates.email.toLowerCase() !== users[uIdx].email.toLowerCase()) {
+    if (emailExists(updates.email)) return { error: 'Email already in use by another account.' };
+    users[uIdx].email = updates.email;
+  }
+  if (updates.password) {
+    const err = validatePassword(updates.password);
+    if (err) return { error: err };
+    users[uIdx].password = updates.password;
+  }
+  setStore(KEYS.USERS, users);
+
+  const profileUpdates: Record<string, any> = {};
+  if (updates.full_name !== undefined) profileUpdates.full_name = updates.full_name;
+  if (updates.contact_number !== undefined) profileUpdates.contact_number = updates.contact_number;
+  if (updates.province !== undefined) profileUpdates.province = updates.province;
+  if (updates.company_name !== undefined) profileUpdates.company_name = updates.company_name;
+  if (Object.keys(profileUpdates).length > 0) updateProfile(userId, profileUpdates);
+
+  if (updates.role) {
+    const roles = getStore<any>(KEYS.USER_ROLES);
+    const rIdx = roles.findIndex((r: any) => r.user_id === userId);
+    if (rIdx === -1) {
+      roles.push({ id: generateId(), user_id: userId, role: updates.role, created_at: new Date().toISOString() });
+    } else {
+      roles[rIdx].role = updates.role;
+    }
+    setStore(KEYS.USER_ROLES, roles);
+  }
+  return { error: null };
+}
+
+export function adminDeleteUser(userId: string): { error: string | null } {
+  const current = getCurrentUser();
+  if (current?.id === userId) return { error: 'You cannot delete your own account while signed in.' };
+
+  setStore(KEYS.USERS, getStore<LocalUser>(KEYS.USERS).filter(u => u.id !== userId));
+  setStore(KEYS.PROFILES, getStore<any>(KEYS.PROFILES).filter((p: any) => p.id !== userId));
+  setStore(KEYS.USER_ROLES, getStore<any>(KEYS.USER_ROLES).filter((r: any) => r.user_id !== userId));
+  setStore(KEYS.BOOKINGS, getStore<any>(KEYS.BOOKINGS).filter((b: any) => b.client_id !== userId && b.installer_id !== userId));
+  setStore(KEYS.PORTFOLIO_ITEMS, getStore<any>(KEYS.PORTFOLIO_ITEMS).filter((i: any) => i.installer_id !== userId));
+  setStore(KEYS.INSTALLER_SPECIALTIES, getStore<any>(KEYS.INSTALLER_SPECIALTIES).filter((s: any) => s.installer_id !== userId));
+  setStore(KEYS.INSTALLER_AVAILABILITY, getStore<any>(KEYS.INSTALLER_AVAILABILITY).filter((a: any) => a.installer_id !== userId));
+  return { error: null };
+}
+
+export function deleteBooking(id: string): { error: string | null } {
+  setStore(KEYS.BOOKINGS, getStore<any>(KEYS.BOOKINGS).filter((b: any) => b.id !== id));
+  return { error: null };
+}
+
+// ---- Admin: Analytics ----
+
+export interface AdminAnalytics {
+  totals: {
+    users: number;
+    admins: number;
+    installers: number;
+    clients: number;
+    bookings: number;
+    pending: number;
+    accepted: number;
+    inProgress: number;
+    completed: number;
+    rejected: number;
+    cancelled: number;
+    portfolioItems: number;
+    specialties: number;
+  };
+  bookingsByStatus: { status: string; count: number }[];
+  usersByRole: { role: string; count: number }[];
+  usersGrowth: { month: string; users: number }[];
+  bookingsTrend: { month: string; bookings: number }[];
+  topInstallers: { id: string; name: string; bookings: number; completed: number }[];
+  topProvinces: { province: string; bookings: number }[];
+  recentActivity: { id: string; type: string; description: string; date: string }[];
+}
+
+export function getAdminAnalytics(): AdminAnalytics {
+  const users = getStore<LocalUser>(KEYS.USERS);
+  const roles = getAllRoles();
+  const bookings = getStore<any>(KEYS.BOOKINGS);
+  const profiles = getAllProfiles();
+  const portfolioItems = getStore<any>(KEYS.PORTFOLIO_ITEMS);
+  const specialties = getStore<any>(KEYS.SPECIALTIES);
+
+  const status = (s: string) => bookings.filter((b: any) => b.status === s).length;
+
+  // Group by month (last 6 months)
+  const now = new Date();
+  const months: { key: string; label: string }[] = [];
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    months.push({ key, label: d.toLocaleString('en-US', { month: 'short' }) });
+  }
+
+  const usersGrowth = months.map(m => ({
+    month: m.label,
+    users: users.filter(u => u.created_at.startsWith(m.key)).length,
+  }));
+
+  const bookingsTrend = months.map(m => ({
+    month: m.label,
+    bookings: bookings.filter((b: any) => (b.created_at || '').startsWith(m.key)).length,
+  }));
+
+  // Top installers by booking count
+  const installerCounts = new Map<string, { bookings: number; completed: number }>();
+  bookings.forEach((b: any) => {
+    const e = installerCounts.get(b.installer_id) || { bookings: 0, completed: 0 };
+    e.bookings += 1;
+    if (b.status === 'completed') e.completed += 1;
+    installerCounts.set(b.installer_id, e);
+  });
+  const topInstallers = Array.from(installerCounts.entries())
+    .map(([id, v]) => {
+      const p = profiles.find((pr: any) => pr.id === id);
+      return { id, name: p?.company_name || p?.full_name || 'Unknown', bookings: v.bookings, completed: v.completed };
+    })
+    .sort((a, b) => b.bookings - a.bookings)
+    .slice(0, 5);
+
+  // Provinces
+  const provinceCounts = new Map<string, number>();
+  bookings.forEach((b: any) => {
+    const prov = b.province || 'Unknown';
+    provinceCounts.set(prov, (provinceCounts.get(prov) || 0) + 1);
+  });
+  const topProvinces = Array.from(provinceCounts.entries())
+    .map(([province, bookings]) => ({ province, bookings }))
+    .sort((a, b) => b.bookings - a.bookings)
+    .slice(0, 5);
+
+  // Recent activity
+  const recentBookings = [...bookings]
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    .slice(0, 5)
+    .map((b: any) => ({
+      id: b.id,
+      type: 'booking',
+      description: `New booking: ${b.project_title}`,
+      date: b.created_at,
+    }));
+  const recentUsers = [...users]
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    .slice(0, 5)
+    .map(u => ({ id: u.id, type: 'user', description: `New user: ${u.email}`, date: u.created_at }));
+  const recentActivity = [...recentBookings, ...recentUsers]
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    .slice(0, 8);
+
+  return {
+    totals: {
+      users: users.length,
+      admins: roles.filter(r => r.role === 'admin').length,
+      installers: roles.filter(r => r.role === 'installer').length,
+      clients: roles.filter(r => r.role === 'client').length,
+      bookings: bookings.length,
+      pending: status('pending'),
+      accepted: status('accepted'),
+      inProgress: status('in_progress'),
+      completed: status('completed'),
+      rejected: status('rejected'),
+      cancelled: status('cancelled'),
+      portfolioItems: portfolioItems.length,
+      specialties: specialties.length,
+    },
+    bookingsByStatus: [
+      { status: 'Pending', count: status('pending') },
+      { status: 'Accepted', count: status('accepted') },
+      { status: 'In Progress', count: status('in_progress') },
+      { status: 'Completed', count: status('completed') },
+      { status: 'Rejected', count: status('rejected') },
+      { status: 'Cancelled', count: status('cancelled') },
+    ].filter(s => s.count > 0),
+    usersByRole: [
+      { role: 'Admins', count: roles.filter(r => r.role === 'admin').length },
+      { role: 'Installers', count: roles.filter(r => r.role === 'installer').length },
+      { role: 'Clients', count: roles.filter(r => r.role === 'client').length },
+    ].filter(r => r.count > 0),
+    usersGrowth,
+    bookingsTrend,
+    topInstallers,
+    topProvinces,
+    recentActivity,
+  };
 }

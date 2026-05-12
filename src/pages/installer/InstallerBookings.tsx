@@ -83,7 +83,7 @@ export default function InstallerBookings() {
                           <TableCell>
                             <div>
                               <p className="font-medium">{booking.project_title}</p>
-                              <p className="text-xs text-muted-foreground truncate max-w-[200px] md:hidden">{booking.client?.full_name}</p>
+                              <p className="text-xs text-muted-foreground truncate max-w-[200px] md:hidden">{booking.client?.company_name}</p>
                             </div>
                           </TableCell>
                           <TableCell className="hidden md:table-cell">
@@ -106,7 +106,7 @@ export default function InstallerBookings() {
                               <SheetContent side="right" className="w-full sm:max-w-lg overflow-y-auto">
                                 <SheetHeader><SheetTitle>{booking.project_title}</SheetTitle></SheetHeader>
                                 <div className="space-y-6 mt-6">
-                                  <div><p className="text-sm font-medium text-muted-foreground">Client</p><p className="font-medium">{booking.client?.full_name}</p></div>
+                                  <div><p className="text-sm font-medium text-muted-foreground">Client</p><p className="font-medium">{booking.client?.company_name}</p></div>
                                   <div><p className="text-sm font-medium text-muted-foreground">Address</p><p>{booking.address || '-'}</p></div>
                                   {booking.project_description && <div><p className="text-sm font-medium text-muted-foreground">Description</p><p className="text-sm">{booking.project_description}</p></div>}
                                   <div><p className="text-sm font-medium text-muted-foreground">Dates</p><p className="text-sm">{booking.start_date ? format(new Date(booking.start_date), 'PPP') : '-'}{booking.end_date && ` - ${format(new Date(booking.end_date), 'PPP')}`}</p></div>

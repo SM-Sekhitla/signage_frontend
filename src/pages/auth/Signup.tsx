@@ -160,7 +160,6 @@ export default function Signup() {
                   <SelectContent>
                     <SelectItem value="client">Client (Find Installers)</SelectItem>
                     <SelectItem value="installer">Installer (Offer Services)</SelectItem>
-                    <SelectItem value="admin">Admin</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -227,7 +226,7 @@ export default function Signup() {
                   return (
                     <div key={rule.label} className="flex items-center gap-2 text-sm">
                       {passed ? (
-                        <Check className="h-4 w-4 text-primary" />
+                        <Check className="h-4 w-4 text-secondary" />
                       ) : (
                         <X className="h-4 w-4 text-destructive" />
                       )}

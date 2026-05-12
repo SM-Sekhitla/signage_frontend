@@ -31,7 +31,7 @@ const Hero = () => {
           <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-6 leading-tight">
             Connect with South Africa's
             <span className="block text-cyan-bright mt-2">
-              Premier Signage Installers
+              Signage Installers
             </span>
           </h1>
 
@@ -56,22 +56,6 @@ const Hero = () => {
                 {user && userRole === 'installer' ? 'My Dashboard' : 'Become an Installer'}
               </Button>
             </Link>
-          </div>
-
-          {/* Stats */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-8 max-w-3xl mx-auto">
-            <div className="bg-white/10 backdrop-blur-sm rounded-lg p-6 border border-white/20">
-              <div className="text-3xl font-bold text-cyan-bright mb-2">10+</div>
-              <div className="text-white/80 text-sm">Verified Installers</div>
-            </div>
-            <div className="bg-white/10 backdrop-blur-sm rounded-lg p-6 border border-white/20">
-              <div className="text-3xl font-bold text-cyan-bright mb-2">2,000+</div>
-              <div className="text-white/80 text-sm">Projects Completed</div>
-            </div>
-            <div className="bg-white/10 backdrop-blur-sm rounded-lg p-6 border border-white/20">
-              <div className="text-3xl font-bold text-cyan-bright mb-2">9 Provinces</div>
-              <div className="text-white/80 text-sm">Nationwide Coverage</div>
-            </div>
           </div>
         </div>
       </div>
