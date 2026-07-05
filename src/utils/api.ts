@@ -1,7 +1,8 @@
 // src/api/axios.ts
 import axios, { AxiosRequestConfig } from 'axios';
 
-const BASE_URL = import.meta.env.VITE_API_URL;
+export const BASE_URL =
+  import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1';
 
 const API = axios.create({
   baseURL: BASE_URL,
@@ -19,10 +20,14 @@ API.interceptors.response.use(
 
       try {
         // Call refresh endpoint, backend will set new httpOnly cookies
-        await fetch(`${BASE_URL}/auth/refresh`, {
+        const refreshResponse = await fetch(`${BASE_URL}/auth/refresh`, {
           method: 'POST',
           credentials: 'include', // include cookies
         });
+
+        if (!refreshResponse.ok) {
+          throw new Error('Session expired');
+        }
 
         // Retry the original request after refresh
         return API(originalRequest);
@@ -32,6 +37,16 @@ API.interceptors.response.use(
         return Promise.reject(error);
       }
     }
+
+    const responseMessage =
+      error.response?.data?.message ||
+      error.response?.data?.detail?.message ||
+      error.response?.data?.detail ||
+      error.message ||
+      'Request failed';
+
+    error.userMessage =
+      typeof responseMessage === 'string' ? responseMessage : 'Request failed';
 
     return Promise.reject(error);
   }

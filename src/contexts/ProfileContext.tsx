@@ -181,7 +181,7 @@ export const ProfileProvider: React.FC<{ children: React.ReactNode }> = ({
   // 🔹 GET PROFILE BY ID
   const getProfile = async (id: string) => {
     try {
-      const res = await API.get(`/profile/${id}`);
+      const res = await API.get(`/profiles/${id}`);
       return profileSchema.parse(res.data);
     } catch {
       return null;
@@ -191,7 +191,7 @@ export const ProfileProvider: React.FC<{ children: React.ReactNode }> = ({
   // 🔹 GET BY USER ID
   const getProfileByUser = async (userId: string) => {
     try {
-      const res = await API.get(`/profile/user/${userId}`);
+      const res = await API.get(`/profiles/user/${userId}`);
       return profileSchema.parse(res.data);
     } catch {
       return null;

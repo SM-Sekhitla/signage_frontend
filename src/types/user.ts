@@ -6,6 +6,7 @@ export type AccountStatus =
   | "PENDING_VERIFICATION"
   | "ACTIVE"
   | "SUSPENDED"
+  | "BLOCKED"
   | "DELETED";
 
 export interface User {

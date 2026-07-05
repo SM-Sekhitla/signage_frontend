@@ -16,6 +16,7 @@ export const accountStatusEnum = z.enum([
   "PENDING_VERIFICATION",
   "ACTIVE",
   "SUSPENDED",
+  "BLOCKED",
   "DELETED",
 ]);
 
